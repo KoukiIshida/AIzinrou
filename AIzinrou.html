@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>改ざん人狼ゲーム (ルール保存対応版)</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans">
+    <div id="app" class="max-w-3xl mx-auto p-4 md:p-6">
+        
+        <header class="mb-6 text-center">
+            <h1 class="text-2xl font-bold text-indigo-600">改ざん人狼ゲーム</h1>
+            <p v-if="role === 'host' && roomId" class="text-sm text-gray-500 mt-2">ルームID: {{ roomId }}</p>
+        </header>
+
+        <div v-if="!role" class="bg-white p-6 rounded-lg shadow-md">
+            <div v-if="!targetRoomId" class="mb-8 border-b pb-6">
+                <h2 class="text-lg font-bold mb-2">ゲームルールの設定 (自動保存されます)</h2>
+                <textarea v-model="gameState.rules" @input="saveRulesLocal" 
+                    placeholder="例：一番嬉しい曜日は？などの質問に答えてください。一人はホストに答えを変えられます。誰が変わったか当てましょう！" 
+                    class="w-full border p-3 rounded h-32 text-sm bg-gray-50"></textarea>
+            </div>
+
+            <div class="text-center">
+                <template v-if="targetRoomId">
+                    <h2 class="text-xl font-bold mb-4">ルームに参加</h2>
+                    <input v-model="playerName" type="text" placeholder="ニックネームを入力" class="w-full border p-2 rounded mb-4">
+                    <button @click="joinAsPlayer" class="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-600">
+                        参加する
+                    </button>
+                </template>
+                <template v-else>
+                    <h2 class="text-xl font-bold mb-4">ホストとしてルームを作成</h2>
+                    <button @click="createRoom" class="w-full bg-indigo-500 text-white font-bold py-3 px-4 rounded hover:bg-indigo-600">
+                        新しく部屋を作る (PC向け)
+                    </button>
+                </template>
+            </div>
+        </div>
+
+        <div v-if="role === 'host'" class="bg-white p-6 rounded-lg shadow-md">
+            <div class="mb-6 flex justify-between items-center bg-gray-50 p-4 rounded">
+                <div>
+                    <p class="font-bold">現在の参加人数: {{ players.length }}人</p>
+                    <p class="text-sm text-gray-600">状況: {{ phaseText[gameState.phase] }}</p>
+                </div>
+                <div id="qrcode" class="bg-white p-2 border"></div>
+            </div>
+
+            <div v-if="gameState.phase === 'lobby'" class="mb-4">
+                <label class="text-xs font-bold text-gray-500">ルールの確認・編集:</label>
+                <textarea v-model="gameState.rules" @input="saveRulesLocal" class="w-full border p-2 text-xs rounded bg-gray-50"></textarea>
+            </div>
+
+            <div class="space-y-4">
+                <div v-if="gameState.phase === 'lobby'">
+                    <button @click="changePhase('answering')" :disabled="players.length < 2" class="w-full bg-blue-500 text-white font-bold py-3 rounded disabled:bg-gray-300">解答開始</button>
+                </div>
+
+                <div v-if="gameState.phase === 'answering'">
+                    <p class="mb-2 font-bold">【解答状況】</p>
+                    <ul class="mb-4">
+                        <li v-for="p in players" :key="p.id" class="border-b py-2">
+                            {{ p.name }} : <span :class="p.answer ? 'text-green-600 font-bold' : 'text-gray-400'">{{ p.answer ? '解答済み' : '回答待ち...' }}</span>
+                        </li>
+                    </ul>
+                    <button @click="changePhase('modifying')" class="w-full bg-red-500 text-white font-bold py-3 rounded">解答締切 (改ざんへ)</button>
+                </div>
+
+                <div v-if="gameState.phase === 'modifying'">
+                    <p class="mb-2 font-bold text-red-600">※1人の解答を改ざんしてください</p>
+                    <div v-for="p in players" :key="p.id" class="mb-4 p-4 border rounded">
+                        <p class="font-bold">{{ p.name }}</p>
+                        <input type="text" v-model="p.answer" class="w-full border p-2 rounded mt-1">
+                        <label class="flex items-center mt-2 cursor-pointer">
+                            <input type="radio" :value="p.id" v-model="gameState.modifiedPlayerId" class="mr-2">
+                            <span class="text-sm text-red-500 font-bold underline">この人を人狼にする</span>
+                        </label>
+                    </div>
+                    <button @click="revealAnswers" :disabled="!gameState.modifiedPlayerId" class="w-full bg-purple-500 text-white font-bold py-3 rounded disabled:bg-gray-300">みんなの解答発表</button>
+                </div>
+
+                <div v-if="gameState.phase === 'revealed'">
+                    <button @click="changePhase('voting')" class="w-full bg-yellow-500 text-white font-bold py-3 rounded">投票開始</button>
+                </div>
+
+                <div v-if="gameState.phase === 'voting'">
+                    <button @click="changePhase('results')" class="w-full bg-pink-500 text-white font-bold py-3 rounded">投票結果発表</button>
+                </div>
+
+                <div v-if="gameState.phase === 'results'">
+                    <h3 class="text-xl font-bold text-red-600 mb-4 text-center">結果発表！</h3>
+                    <p class="text-center mb-6">改ざんされたのは: <span class="font-bold text-2xl">「{{ getPlayerName(gameState.modifiedPlayerId) }}」</span></p>
+                    <button @click="resetGame" class="w-full bg-gray-800 text-white font-bold py-3 rounded">次の問題へ</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="role === 'player'" class="bg-white p-6 rounded-lg shadow-md min-h-[60vh]">
+            
+            <div v-if="gameState.phase === 'lobby'">
+                <div v-if="gameState.rules" class="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded">
+                    <h3 class="font-bold text-indigo-700 mb-2">【ルール】</h3>
+                    <p class="text-sm whitespace-pre-wrap">{{ gameState.rules }}</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-xl font-bold text-gray-400 animate-pulse">待機中...</p>
+                    <p class="mt-4">ホストが開始するのをお待ちください。</p>
+                </div>
+            </div>
+
+            <div v-if="gameState.phase === 'answering'" class="text-center">
+                <h3 class="text-lg font-bold mb-4">解答を入力</h3>
+                <input v-model="myInput" type="text" class="w-full border p-3 rounded mb-4">
+                <button @click="submitAnswer" class="w-full bg-blue-500 text-white font-bold py-3 rounded">送信する</button>
+                <p v-if="myPlayerInfo?.answer" class="mt-4 text-green-600 font-bold">送信完了！</p>
+            </div>
+
+            <div v-if="gameState.phase === 'voting'" class="text-center">
+                <h3 class="text-lg font-bold mb-4">人狼だと思う人に投票！</h3>
+                <div class="space-y-2 text-left">
+                    <label v-for="p in gameState.players" :key="p.id" class="block border p-3 rounded">
+                        <input type="radio" :value="p.id" v-model="myVote" class="mr-2">{{ p.name }}
+                    </label>
+                </div>
+                <button @click="submitVote" class="w-full mt-4 bg-yellow-500 text-white font-bold py-3 rounded">投票する</button>
+            </div>
+
+            <div v-if="['modifying', 'revealed', 'results'].includes(gameState.phase)" class="text-center py-10">
+                <p class="text-xl font-bold text-gray-400">ホスト画面に注目してください</p>
+                <div v-if="gameState.phase === 'revealed'" class="mt-4 text-left">
+                    <p class="font-bold mb-2">発表された解答：</p>
+                    <div v-for="p in gameState.players" class="bg-gray-50 p-2 mb-1 rounded text-sm">{{p.name}}: {{p.answer}}</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        createApp({
+            data() {
+                return {
+                    role: null, peer: null, conn: null, connections: [], roomId: '', targetRoomId: '', playerName: '', myInput: '', myVote: '',
+                    gameState: {
+                        phase: 'lobby',
+                        rules: localStorage.getItem('werewolf_rules') || '',
+                        modifiedPlayerId: null,
+                        players: []
+                    },
+                    phaseText: { 'lobby': '待機中', 'answering': '解答中', 'modifying': '改ざん中', 'revealed': '発表中', 'voting': '投票中', 'results': '結果発表' }
+                }
+            },
+            mounted() {
+                const roomParams = new URLSearchParams(window.location.search).get('room');
+                if (roomParams) this.targetRoomId = roomParams;
+            },
+            computed: {
+                players() { return this.gameState.players; },
+                myPlayerInfo() { return this.gameState.players.find(p => p.id === (this.peer ? this.peer.id : '')); }
+            },
+            methods: {
+                saveRulesLocal() {
+                    localStorage.setItem('werewolf_rules', this.gameState.rules);
+                    if (this.role === 'host') this.broadcastState();
+                },
+                createRoom() {
+                    this.role = 'host';
+                    this.roomId = 'ROOM-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+                    this.peer = new Peer(this.roomId);
+                    this.peer.on('open', (id) => {
+                        setTimeout(() => {
+                            new QRCode(document.getElementById("qrcode"), {
+                                text: window.location.href.split('?')[0] + '?room=' + this.roomId,
+                                width: 100, height: 100
+                            });
+                        }, 100);
+                    });
+                    this.peer.on('connection', (conn) => {
+                        this.connections.push(conn);
+                        conn.on('data', (data) => {
+                            if (data.type === 'join') {
+                                this.gameState.players.push({ id: conn.peer, name: data.name, answer: '', originalAnswer: '', vote: '' });
+                                this.broadcastState();
+                            }
+                            if (data.type === 'answer') {
+                                let p = this.gameState.players.find(p => p.id === conn.peer);
+                                if (p) { p.answer = data.answer; p.originalAnswer = data.answer; this.broadcastState(); }
+                            }
+                            if (data.type === 'vote') {
+                                let p = this.gameState.players.find(p => p.id === conn.peer);
+                                if (p) { p.vote = data.vote; this.broadcastState(); }
+                            }
+                        });
+                    });
+                },
+                joinAsPlayer() {
+                    this.role = 'player';
+                    this.peer = new Peer();
+                    this.peer.on('open', () => {
+                        this.conn = this.peer.connect(this.targetRoomId);
+                        this.conn.on('open', () => { this.conn.send({ type: 'join', name: this.playerName }); });
+                        this.conn.on('data', (data) => { if (data.type === 'state_update') this.gameState = data.state; });
+                    });
+                },
+                broadcastState() { this.connections.forEach(c => c.send({ type: 'state_update', state: this.gameState })); },
+                changePhase(p) { this.gameState.phase = p; this.broadcastState(); },
+                revealAnswers() { this.changePhase('revealed'); },
+                resetGame() {
+                    this.gameState.phase = 'lobby'; this.gameState.modifiedPlayerId = null;
+                    this.gameState.players.forEach(p => { p.answer = ''; p.vote = ''; });
+                    this.broadcastState();
+                },
+                submitAnswer() { if(confirm(`「${this.myInput}」で送信？`)) this.conn.send({ type: 'answer', answer: this.myInput }); },
+                submitVote() { if(confirm("投票しますか？")) this.conn.send({ type: 'vote', vote: this.myVote }); },
+                getPlayerName(id) { return (this.gameState.players.find(p => p.id === id) || {}).name; }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
