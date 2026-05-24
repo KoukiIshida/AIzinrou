@@ -61,11 +61,6 @@
                 </div>
             </div>
 
-            <div class="mb-6 p-4 bg-yellow-50 border border-yellow-100 rounded">
-                <p class="text-xs font-bold text-yellow-700 mb-1">【設定済みルール】</p>
-                <p class="text-sm whitespace-pre-wrap">{{ gameState.rules || 'ルール設定なし' }}</p>
-            </div>
-
             <div class="space-y-4">
                 <div v-if="gameState.phase === 'lobby'">
                     <button @click="changePhase('answering')" :disabled="players.length < 2" 
@@ -79,9 +74,11 @@
                 <div v-if="gameState.phase === 'answering'">
                     <p class="mb-2 font-bold">解答状況</p>
                     <ul class="mb-4 space-y-2">
-                        <li v-for="p in players" :key="p.id" class="bg-gray-50 p-2 rounded flex justify-between">
-                            <span>{{ p.name }}</span>
-                            <span :class="p.answer ? 'text-green-600 font-bold' : 'text-gray-400'">{{ p.answer ? '✓ 完了' : '回答待ち...' }}</span>
+                        <li v-for="p in players" :key="p.id" class="bg-gray-50 p-3 rounded flex flex-col">
+                            <span class="font-bold">{{ p.name }}</span>
+                            <span :class="p.answer ? 'text-indigo-600 font-bold mt-1' : 'text-gray-400 mt-1'">
+                                {{ p.answer ? p.answer : '回答待ち...' }}
+                            </span>
                         </li>
                     </ul>
                     <button @click="changePhase('modifying')" class="w-full bg-red-500 text-white font-bold py-3 rounded hover:bg-red-600">解答締切 (改ざんへ)</button>
@@ -97,7 +94,7 @@
                             この人を「人狼(改ざん対象)」にする
                         </label>
                     </div>
-                    <button @click="revealAnswers" :disabled="!gameState.modifiedPlayerId" class="w-full bg-purple-500 text-white font-bold py-3 rounded disabled:bg-gray-300">みんなの解答発表</button>
+                    <button @click="changePhase('revealed')" :disabled="!gameState.modifiedPlayerId" class="w-full bg-purple-500 text-white font-bold py-3 rounded disabled:bg-gray-300">みんなの解答発表</button>
                 </div>
 
                 <div v-if="gameState.phase === 'revealed'">
@@ -112,7 +109,18 @@
                             <span :class="p.vote ? 'text-green-600 font-bold' : 'text-gray-400'">{{ p.vote ? '✓ 完了' : '投票待ち...' }}</span>
                         </li>
                     </ul>
-                    <button @click="changePhase('results')" class="w-full bg-pink-500 text-white font-bold py-3 rounded">投票結果発表</button>
+                    <button @click="changePhase('vote_results')" class="w-full bg-orange-500 text-white font-bold py-3 rounded hover:bg-orange-600">投票結果発表</button>
+                </div>
+
+                <div v-if="gameState.phase === 'vote_results'">
+                    <p class="mb-4 font-bold text-center text-lg border-b pb-2">投票結果</p>
+                    <ul class="mb-6 space-y-2">
+                        <li v-for="res in voteResults" :key="res.id" class="bg-gray-50 p-3 rounded flex justify-between items-center">
+                            <span class="font-bold">{{ res.name }}</span>
+                            <span class="font-bold text-red-500 text-lg">{{ res.count }} 票</span>
+                        </li>
+                    </ul>
+                    <button @click="changePhase('results')" class="w-full bg-pink-500 text-white font-bold py-3 rounded hover:bg-pink-600">正解(人狼)発表</button>
                 </div>
 
                 <div v-if="gameState.phase === 'results'">
@@ -126,6 +134,7 @@
         </div>
 
         <div v-if="role === 'player'" class="bg-white p-6 rounded-lg shadow-md min-h-[60vh]">
+            
             <div v-if="gameState.phase === 'lobby'">
                 <div v-if="gameState.rules" class="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded">
                     <h3 class="font-bold text-indigo-700 mb-2">【今回のルール】</h3>
@@ -141,28 +150,56 @@
                 <h3 class="text-lg font-bold mb-4">解答を入力</h3>
                 <input v-model="myInput" type="text" class="w-full border p-4 rounded mb-4 text-lg shadow-inner">
                 <button @click="submitAnswer" class="w-full bg-blue-500 text-white font-bold py-4 rounded text-lg">送信する</button>
-                <p v-if="myPlayerInfo?.answer" class="mt-4 text-green-600 font-bold">✓ 送信完了！</p>
+                <p v-if="myPlayerInfo?.answer" class="mt-4 text-green-600 font-bold">✓ 送信完了！他の人を待っています</p>
+            </div>
+
+            <div v-if="gameState.phase === 'modifying'" class="text-center py-10">
+                <p class="text-xl font-bold text-gray-400 animate-pulse">待機中...</p>
+                <p class="mt-4 text-sm">ホストが操作中です。しばらくお待ちください。</p>
+            </div>
+
+            <div v-if="gameState.phase === 'revealed'" class="text-center">
+                <h3 class="text-lg font-bold mb-4 border-b pb-2">みんなの解答</h3>
+                <div class="text-left space-y-2">
+                    <div v-for="p in gameState.players" :key="p.id" class="bg-gray-50 p-3 mb-2 rounded border text-sm">
+                        <span class="font-bold text-indigo-600">{{p.name}}:</span> {{p.answer}}
+                    </div>
+                </div>
+                <p class="mt-6 text-sm text-gray-500 font-bold">ホストが投票を開始するまでお待ちください</p>
             </div>
 
             <div v-if="gameState.phase === 'voting'" class="text-center">
-                <h3 class="text-lg font-bold mb-4">人狼だと思う人に投票！</h3>
+                <h3 class="text-lg font-bold mb-4 border-b pb-2">人狼だと思う人に投票！</h3>
                 <div class="space-y-3 text-left">
-                    <label v-for="p in gameState.players" :key="p.id" class="block border p-4 rounded-xl cursor-pointer hover:bg-gray-50">
-                        <input type="radio" :value="p.id" v-model="myVote" class="mr-2 transform scale-150">
-                        <span class="font-bold">{{ p.name }}</span>
-                    </label>
+                    <template v-for="p in gameState.players" :key="p.id">
+                        <label v-if="p.id !== myPlayerInfo?.id" class="block border p-4 rounded-xl cursor-pointer hover:bg-gray-50">
+                            <input type="radio" :value="p.id" v-model="myVote" class="mr-2 transform scale-150">
+                            <span class="font-bold">{{ p.name }}</span>
+                        </label>
+                    </template>
                 </div>
                 <button @click="submitVote" class="w-full mt-6 bg-yellow-500 text-white font-bold py-4 rounded text-lg shadow">投票を確定する</button>
+                <p v-if="myPlayerInfo?.vote" class="mt-4 text-green-600 font-bold">✓ 投票完了！他の人を待っています</p>
             </div>
 
-            <div v-if="['modifying', 'revealed', 'results'].includes(gameState.phase)" class="text-center py-10">
-                <p class="text-xl font-bold text-gray-400">ホスト画面の発表に<br>注目してください！</p>
-                <div v-if="gameState.phase === 'revealed'" class="mt-6 text-left border-t pt-4">
-                    <p class="font-bold mb-2 text-indigo-600">発表された解答リスト：</p>
-                    <div v-for="p in gameState.players" class="bg-gray-50 p-3 mb-2 rounded border text-sm">
-                        <span class="font-bold">{{p.name}}:</span> {{p.answer}}
-                    </div>
-                </div>
+            <div v-if="gameState.phase === 'vote_results'" class="text-center">
+                <h3 class="text-lg font-bold mb-4 border-b pb-2">投票結果</h3>
+                <ul class="mb-6 space-y-2 text-left">
+                    <li v-for="res in voteResults" :key="res.id" class="bg-gray-50 p-3 rounded flex justify-between items-center border">
+                        <span class="font-bold">{{ res.name }}</span>
+                        <span class="font-bold text-red-500">{{ res.count }} 票</span>
+                    </li>
+                </ul>
+                <p class="text-sm text-gray-500">ホストが正解を発表するまでお待ちください</p>
+            </div>
+
+            <div v-if="gameState.phase === 'results'" class="text-center">
+                <h3 class="text-xl font-bold text-red-600 mb-4 border-b pb-2">正解発表！</h3>
+                <p class="text-lg mb-2">ホストに改ざんされた「人狼」は...</p>
+                <p class="text-3xl font-bold text-indigo-700 bg-indigo-50 p-4 rounded mt-4 border border-indigo-200">
+                    {{ getPlayerName(gameState.modifiedPlayerId) }}
+                </p>
+                <p class="mt-8 text-sm text-gray-500">ホストが次のゲームを準備しています。</p>
             </div>
         </div>
 
@@ -188,7 +225,20 @@
             },
             computed: {
                 players() { return this.gameState.players; },
-                myPlayerInfo() { return this.gameState.players.find(p => p.id === (this.peer ? this.peer.id : '')); }
+                myPlayerInfo() { return this.gameState.players.find(p => p.id === (this.peer ? this.peer.id : '')); },
+                // 誰に何票入ったかを集計する機能
+                voteResults() {
+                    const counts = {};
+                    this.gameState.players.forEach(p => counts[p.id] = 0);
+                    this.gameState.players.forEach(p => {
+                        if (p.vote) counts[p.vote]++;
+                    });
+                    return this.gameState.players.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        count: counts[p.id]
+                    })).sort((a, b) => b.count - a.count); // 票数が多い順に並び替え
+                }
             },
             methods: {
                 saveRulesLocal() {
@@ -234,20 +284,25 @@
                 },
                 broadcastState() { this.connections.forEach(c => c.send({ type: 'state_update', state: this.gameState })); },
                 changePhase(p) { this.gameState.phase = p; this.broadcastState(); },
-                revealAnswers() { this.changePhase('revealed'); },
                 resetGame() {
-                    this.gameState.phase = 'lobby'; this.gameState.modifiedPlayerId = null;
+                    this.gameState.phase = 'lobby'; 
+                    this.gameState.modifiedPlayerId = null;
                     this.gameState.players.forEach(p => { p.answer = ''; p.vote = ''; });
+                    this.myInput = ''; 
+                    this.myVote = '';
                     this.broadcastState();
                 },
-                submitAnswer() { if(confirm(`「${this.myInput}」で送信しますか？`)) this.conn.send({ type: 'answer', answer: this.myInput }); },
-                submitVote() { if(confirm("投票を確定しますか？")) this.conn.send({ type: 'vote', vote: this.myVote }); },
+                submitAnswer() { 
+                    if(!this.myInput.trim()) return;
+                    if(confirm(`「${this.myInput}」で送信しますか？`)) this.conn.send({ type: 'answer', answer: this.myInput }); 
+                },
+                submitVote() { 
+                    if(!this.myVote) return;
+                    if(confirm("投票を確定しますか？")) this.conn.send({ type: 'vote', vote: this.myVote }); 
+                },
                 getPlayerName(id) { return (this.gameState.players.find(p => p.id === id) || {}).name; }
             }
         }).mount('#app');
     </script>
 </body>
 </html>
-
-
-改良版の準備が整いました！最新のコードを反映して、ぜひお楽しみください。
