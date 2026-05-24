@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI上書き人狼</title>
+    <title>AI乗っ取り人狼</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -23,7 +23,7 @@
         </div>
 
         <header class="mb-6 text-center">
-            <h1 class="text-2xl font-bold text-indigo-600">AI上書き人狼</h1>
+            <h1 class="text-2xl font-bold text-indigo-600">AI乗っ取り人狼</h1>
             <p v-if="role === 'host' && roomId" class="text-sm text-gray-500 mt-2">ルームID: {{ roomId }}</p>
         </header>
 
@@ -31,7 +31,7 @@
             <div v-if="!targetRoomId" class="mb-8 border-b pb-6">
                 <h2 class="text-lg font-bold mb-2 text-gray-600">① ルール設定</h2>
                 <textarea v-model="gameState.rules" @input="saveRulesLocal" 
-                    placeholder="例：あるお題に対して解答します。1人だけAIに答えを上書きされます！誰が上書きされた（人狼）か当てましょう！（改行も反映されます）" 
+                    placeholder="例：あるお題に対して解答します。1人だけAIに答えを乗っ取られます！誰が乗っ取られた（人狼）か当てましょう！（改行も反映されます）" 
                     class="w-full border p-3 rounded h-32 text-sm bg-gray-50"></textarea>
             </div>
             <div class="text-center">
@@ -88,17 +88,17 @@
                             <span class="ml-2">{{ p.answer || '(入力中...)' }}</span>
                         </li>
                     </ul>
-                    <button @click="changePhase('modifying')" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded shadow">解答締切 (ランダムで人狼決定)</button>
+                    <button @click="changePhase('modifying')" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded shadow">解答締切 (ランダムでAI乗っ取り先を決定)</button>
                 </div>
 
                 <div v-if="gameState.phase === 'modifying'">
-                    <p class="font-bold text-red-600 mb-2">システムがランダムに人狼を選びました！</p>
+                    <p class="font-bold text-red-600 mb-2">システムがランダムにAI乗っ取り先を選びました！</p>
                     
                     <div class="mb-6 p-6 border rounded-xl bg-red-50 shadow-md border-red-200 text-center">
-                        <p class="font-bold text-xl text-red-700 mb-3">人狼は <span class="text-3xl bg-white px-4 py-1 rounded shadow-sm">{{ getPlayerName(gameState.modifiedPlayerId) }}</span> です</p>
+                        <p class="font-bold text-xl text-red-700 mb-3">乗っ取られたのは <span class="text-3xl bg-white px-4 py-1 rounded shadow-sm">{{ getPlayerName(gameState.modifiedPlayerId) }}</span> です</p>
                         <p class="text-sm text-gray-600 mb-4">元の解答: <span class="font-bold text-gray-800">{{ getOriginalAnswer(gameState.modifiedPlayerId) }}</span></p>
                         
-                        <p class="text-sm font-bold mt-6 text-red-600">↓ AIが上書きする解答を入力してください ↓</p>
+                        <p class="text-sm font-bold mt-6 text-red-600">↓ AIとして乗っ取り後の解答を入力してください ↓</p>
                         
                         <template v-for="p in players" :key="p.id">
                             <input v-if="p.id === gameState.modifiedPlayerId" type="text" v-model="p.answer" placeholder="ここに入力..." class="w-full border-2 border-red-400 focus:border-red-600 outline-none p-4 rounded mt-2 text-xl shadow-inner bg-white text-center">
@@ -119,12 +119,12 @@
                             
                             <span class="font-bold mb-1" :class="p.id === gameState.modifiedPlayerId ? 'text-red-700' : 'text-indigo-600'">
                                 {{p.name}}:
-                                <span v-if="p.id === gameState.modifiedPlayerId" class="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full ml-1">人狼</span>
+                                <span v-if="p.id === gameState.modifiedPlayerId" class="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full ml-1">AI乗っ取り</span>
                             </span> 
 
                             <div v-if="p.id === gameState.modifiedPlayerId" class="mt-1 p-2 bg-white rounded border border-red-100">
                                 <p class="text-xs text-gray-400 line-through mb-1">元の解答: {{p.originalAnswer}}</p>
-                                <p class="text-base font-bold text-red-600">改ざん後: {{p.answer}}</p>
+                                <p class="text-base font-bold text-red-600">乗っ取り後: {{p.answer}}</p>
                             </div>
                             
                             <div v-else>
@@ -161,11 +161,11 @@
                 <div v-if="gameState.phase === 'results'">
                     <div class="text-center p-6 bg-white rounded shadow border mb-4">
                         <h3 class="text-xl font-bold text-gray-800 mb-2">正解発表</h3>
-                        <p class="text-2xl font-bold mb-4 text-red-600">人狼は {{ getPlayerName(gameState.modifiedPlayerId) }} でした！</p>
+                        <p class="text-2xl font-bold mb-4 text-red-600">乗っ取られたのは {{ getPlayerName(gameState.modifiedPlayerId) }} でした！</p>
                         
                         <div class="py-4 px-2 rounded-lg mb-6 font-bold text-2xl" 
                              :class="wolfResult === 'WIN' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700'">
-                            {{ wolfResult === 'WIN' ? '🎉 人狼の勝ち！ 🎉' : '💀 人狼の負け... 💀' }}
+                            {{ wolfResult === 'WIN' ? '🎉 AI(人狼)の勝ち！ 🎉' : '💀 AI(人狼)の負け... 💀' }}
                         </div>
 
                         <p class="text-sm font-bold text-gray-500 border-b pb-1 mb-2 text-left">最終投票ランキング</p>
@@ -218,7 +218,7 @@
             </div>
 
             <div v-if="gameState.phase === 'voting'" class="text-center w-full">
-                <h3 class="font-bold mb-4 border-b pb-2">人狼だと思う人に投票！</h3>
+                <h3 class="font-bold mb-4 border-b pb-2">AIに乗っ取られたと思う人に投票！</h3>
                 <div class="space-y-3 text-left">
                     <template v-for="p in gameState.players" :key="p.id">
                         <label v-if="p.id !== myPlayerInfo?.id" class="block border p-4 rounded-xl cursor-pointer hover:bg-gray-50 shadow-sm transition-all flex items-center">
@@ -243,14 +243,14 @@
 
             <div v-if="gameState.phase === 'results'" class="text-center w-full">
                 <h3 class="text-xl font-bold text-gray-800 mb-2 border-b pb-2">結果発表！</h3>
-                <p class="text-sm text-gray-500 mb-2">AIに解答を上書きされた人狼は...</p>
+                <p class="text-sm text-gray-500 mb-2">AIに乗っ取られていたのは...</p>
                 <div class="bg-white text-red-600 p-4 rounded-xl text-3xl font-bold shadow border-2 border-red-100 mb-4">
                     {{ getPlayerName(gameState.modifiedPlayerId) }}
                 </div>
 
                 <div class="py-4 px-2 rounded-lg mb-6 font-bold text-xl shadow" 
                      :class="wolfResult === 'WIN' ? 'bg-indigo-600 text-white' : 'bg-green-500 text-white'">
-                    {{ wolfResult === 'WIN' ? '🎉 人狼の勝ち！ 🎉' : '💀 人狼の負け... 💀' }}
+                    {{ wolfResult === 'WIN' ? '🎉 AI(人狼)の勝ち！ 🎉' : '💀 AI(人狼)の負け... 💀' }}
                 </div>
 
                 <div class="space-y-2 text-left mt-6">
@@ -279,7 +279,7 @@
                         rules: localStorage.getItem('werewolf_rules') || '', 
                         modifiedPlayerId: null, 
                         players: [],
-                        currentQuestion: '' // 追加：進行中のお題
+                        currentQuestion: '' 
                     },
                     
                     timeLeft: 120,
@@ -393,7 +393,7 @@
                 resetGame() {
                     this.gameState.phase = 'lobby'; 
                     this.gameState.modifiedPlayerId = null;
-                    this.gameState.currentQuestion = ''; // 次の問題のためにリセット
+                    this.gameState.currentQuestion = ''; 
                     this.gameState.players.forEach(p => { p.answer = ''; p.originalAnswer = ''; p.vote = ''; });
                     this.myInput = ''; 
                     this.myVote = ''; 
