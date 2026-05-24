@@ -60,11 +60,24 @@
                 </div>
             </div>
 
+            <div v-if="gameState.phase !== 'lobby' && gameState.currentQuestion" class="mb-6 p-4 bg-indigo-50 border-l-4 border-indigo-500 rounded-r text-left">
+                <p class="text-xs text-indigo-600 font-bold mb-1">現在のお題</p>
+                <p class="font-bold text-gray-800 text-lg">{{ gameState.currentQuestion }}</p>
+            </div>
+
             <div class="space-y-4">
                 <div v-if="gameState.phase === 'lobby'">
-                    <button @click="changePhase('answering')" :disabled="players.length < 2" 
+                    <div class="mb-6 p-5 border-2 border-indigo-100 rounded-xl bg-white shadow-sm">
+                        <label class="block font-bold mb-2 text-indigo-700">【今回のお題】</label>
+                        <input type="text" v-model="gameState.currentQuestion" placeholder="例：一番好きな給食のメニューは？" class="w-full border-2 border-gray-200 focus:border-indigo-500 outline-none p-3 rounded text-lg transition-colors">
+                    </div>
+
+                    <button @click="changePhase('answering')" :disabled="players.length < 2 || !gameState.currentQuestion.trim()" 
                         class="w-full py-4 rounded font-bold text-white shadow transition-colors"
-                        :class="players.length < 2 ? 'bg-gray-300' : 'bg-blue-600 hover:bg-blue-700'">解答開始</button>
+                        :class="(players.length < 2 || !gameState.currentQuestion.trim()) ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'">解答開始</button>
+                    
+                    <p v-if="players.length < 2" class="text-center text-xs text-red-500 mt-2">※開始するには2人以上の参加が必要です</p>
+                    <p v-if="players.length >= 2 && !gameState.currentQuestion.trim()" class="text-center text-xs text-red-500 mt-2">※お題を入力してください</p>
                 </div>
 
                 <div v-if="gameState.phase === 'answering'">
@@ -98,6 +111,28 @@
                     <div class="text-center font-bold text-3xl text-red-600 mb-6 bg-red-50 p-4 rounded-lg border-2 border-red-200 shadow-inner">
                         ⏳ 議論タイム: {{ formattedTime }}
                     </div>
+
+                    <h3 class="font-bold border-b pb-2 mb-2">みんなの解答 (ホスト確認用)</h3>
+                    <div class="text-left space-y-2 mb-6">
+                        <div v-for="p in players" :key="p.id" class="p-3 rounded border text-sm shadow-sm flex flex-col"
+                             :class="p.id === gameState.modifiedPlayerId ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-200'">
+                            
+                            <span class="font-bold mb-1" :class="p.id === gameState.modifiedPlayerId ? 'text-red-700' : 'text-indigo-600'">
+                                {{p.name}}:
+                                <span v-if="p.id === gameState.modifiedPlayerId" class="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full ml-1">人狼</span>
+                            </span> 
+
+                            <div v-if="p.id === gameState.modifiedPlayerId" class="mt-1 p-2 bg-white rounded border border-red-100">
+                                <p class="text-xs text-gray-400 line-through mb-1">元の解答: {{p.originalAnswer}}</p>
+                                <p class="text-base font-bold text-red-600">改ざん後: {{p.answer}}</p>
+                            </div>
+                            
+                            <div v-else>
+                                <span class="text-base">{{p.answer}}</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <button @click="changePhase('voting')" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-4 rounded text-lg shadow">投票開始</button>
                 </div>
 
@@ -154,6 +189,11 @@
                     <p style="white-space: pre-wrap; line-height: 1.6;" class="text-gray-700">{{ gameState.rules }}</p>
                 </div>
                 <p class="text-xl font-bold text-gray-400 animate-pulse">待機中...</p>
+            </div>
+
+            <div v-if="gameState.phase !== 'lobby' && !['modifying'].includes(gameState.phase) && gameState.currentQuestion" class="mb-6 p-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl text-center shadow-sm w-full">
+                <p class="text-sm text-indigo-600 font-bold mb-1">【今回のお題】</p>
+                <p class="font-bold text-gray-800 text-xl">{{ gameState.currentQuestion }}</p>
             </div>
 
             <div v-if="gameState.phase === 'answering'" class="text-center w-full">
@@ -234,10 +274,15 @@
             data() {
                 return {
                     role: null, peer: null, conn: null, connections: [], roomId: '', targetRoomId: '', playerName: '', myInput: '', myVote: '',
-                    gameState: { phase: 'lobby', rules: localStorage.getItem('werewolf_rules') || '', modifiedPlayerId: null, players: [] },
+                    gameState: { 
+                        phase: 'lobby', 
+                        rules: localStorage.getItem('werewolf_rules') || '', 
+                        modifiedPlayerId: null, 
+                        players: [],
+                        currentQuestion: '' // 追加：進行中のお題
+                    },
                     
-                    // タイマー用の変数
-                    timeLeft: 120, // 2分(120秒)
+                    timeLeft: 120,
                     timerInterval: null,
                     showTimeUpPopup: false
                 }
@@ -261,16 +306,15 @@
                     const topVotedPlayers = results.filter(r => r.count === topVoteCount);
                     
                     if (topVotedPlayers.length > 1) {
-                        return 'WIN'; // 同率1位が複数なら人狼の勝ち
+                        return 'WIN'; 
                     } else {
                         if (topVotedPlayers[0].id === this.gameState.modifiedPlayerId) {
-                            return 'LOSE'; // 単独1位が人狼なら負け
+                            return 'LOSE'; 
                         } else {
-                            return 'WIN'; // それ以外は勝ち
+                            return 'WIN'; 
                         }
                     }
                 },
-                // タイマーを MM:SS 形式に変換する
                 formattedTime() {
                     const m = Math.floor(this.timeLeft / 60);
                     const s = this.timeLeft % 60;
@@ -278,14 +322,12 @@
                 }
             },
             watch: {
-                // フェーズが変わったときの処理（タイマーと入力リセット）
                 'gameState.phase'(newPhase) {
                     if (newPhase === 'lobby') {
                         this.myInput = '';
                         this.myVote = '';
                     }
 
-                    // 「解答発表」フェーズ（＝投票開始ボタンがある画面）になったらタイマーを開始
                     if (newPhase === 'revealed') {
                         this.timeLeft = 120;
                         this.showTimeUpPopup = false;
@@ -296,11 +338,10 @@
                                 this.timeLeft--;
                             } else {
                                 clearInterval(this.timerInterval);
-                                this.showTimeUpPopup = true; // 0秒でポップアップ表示
+                                this.showTimeUpPopup = true; 
                             }
                         }, 1000);
                     } else {
-                        // 他のフェーズに移動したらタイマー停止＆ポップアップを消す
                         clearInterval(this.timerInterval);
                         this.showTimeUpPopup = false;
                     }
@@ -337,7 +378,6 @@
                 broadcastState() { this.connections.forEach(c => c.send({ type: 'state_update', state: this.gameState })); },
                 
                 changePhase(p) { 
-                    // 改ざんフェイズへ進むとき、ランダムに1人を人狼として選ぶ
                     if (p === 'modifying') {
                         const playersList = this.gameState.players;
                         if (playersList.length > 0) {
@@ -351,9 +391,13 @@
                 },
 
                 resetGame() {
-                    this.gameState.phase = 'lobby'; this.gameState.modifiedPlayerId = null;
+                    this.gameState.phase = 'lobby'; 
+                    this.gameState.modifiedPlayerId = null;
+                    this.gameState.currentQuestion = ''; // 次の問題のためにリセット
                     this.gameState.players.forEach(p => { p.answer = ''; p.originalAnswer = ''; p.vote = ''; });
-                    this.myInput = ''; this.myVote = ''; this.broadcastState();
+                    this.myInput = ''; 
+                    this.myVote = ''; 
+                    this.broadcastState();
                 },
                 submitAnswer() { if(confirm(`「${this.myInput}」で送信しますか？`)) this.conn.send({ type: 'answer', answer: this.myInput }); },
                 submitVote() { if(confirm("投票を確定しますか？")) this.conn.send({ type: 'vote', vote: this.myVote }); },
