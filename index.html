@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>改ざん人狼ゲーム v3</title>
+    <title>改ざん人狼ゲーム</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -21,7 +21,7 @@
             <div v-if="!targetRoomId" class="mb-8 border-b pb-6">
                 <h2 class="text-lg font-bold mb-2 text-gray-600">① ルール設定</h2>
                 <textarea v-model="gameState.rules" @input="saveRulesLocal" 
-                    placeholder="ここにルールを記入..." 
+                    placeholder="ここにルールを記入...（改行も反映されます）" 
                     class="w-full border p-3 rounded h-32 text-sm bg-gray-50"></textarea>
             </div>
             <div class="text-center">
@@ -65,17 +65,18 @@
                             <span class="ml-2">{{ p.answer || '(入力中...)' }}</span>
                         </li>
                     </ul>
-                    <button @click="changePhase('modifying')" class="w-full bg-red-500 text-white font-bold py-3 rounded">解答締切</button>
+                    <button @click="changePhase('modifying')" class="w-full bg-red-500 text-white font-bold py-3 rounded">解答締切 (ランダムで人狼決定)</button>
                 </div>
 
                 <div v-if="gameState.phase === 'modifying'">
-                    <p class="font-bold text-red-600 mb-2">改ざん対象の選択</p>
-                    <div v-for="p in players" :key="p.id" class="mb-4 p-4 border rounded bg-white shadow-sm">
-                        <p class="font-bold mb-1">{{ p.name }}</p>
-                        <input type="text" v-model="p.answer" class="w-full border p-2 rounded mb-2">
-                        <label class="text-xs text-red-500 font-bold"><input type="radio" :value="p.id" v-model="gameState.modifiedPlayerId" class="mr-1">この人を人狼にする</label>
+                    <p class="font-bold text-red-600 mb-2">システムがランダムに人狼を選びました！</p>
+                    <div class="mb-6 p-4 border rounded bg-red-50 shadow-sm border-red-200">
+                        <p class="font-bold text-lg text-red-700 mb-2">今回の人狼: {{ getPlayerName(gameState.modifiedPlayerId) }}</p>
+                        <p class="text-sm text-gray-600 mb-2">元の解答: {{ getOriginalAnswer(gameState.modifiedPlayerId) }}</p>
+                        <p class="text-sm font-bold mt-4">↓ 改ざん後の解答を入力してください ↓</p>
+                        <input type="text" v-model="getModifiedPlayer().answer" class="w-full border-2 border-red-300 p-3 rounded mt-1 text-lg">
                     </div>
-                    <button @click="changePhase('revealed')" :disabled="!gameState.modifiedPlayerId" class="w-full bg-purple-500 text-white font-bold py-3 rounded">みんなの解答発表</button>
+                    <button @click="changePhase('revealed')" class="w-full bg-purple-500 text-white font-bold py-3 rounded">みんなの解答発表</button>
                 </div>
 
                 <div v-if="gameState.phase === 'revealed'">
@@ -94,29 +95,44 @@
                 </div>
 
                 <div v-if="gameState.phase === 'vote_results'">
-                    <h3 class="text-center font-bold text-lg mb-4">投票集計 (PC)</h3>
+                    <h3 class="text-center font-bold text-lg mb-4">投票集計</h3>
                     <div class="space-y-2">
                         <div v-for="res in voteResults" :key="res.id" class="flex justify-between bg-gray-50 p-3 rounded border">
                             <span class="font-bold">{{ res.name }}</span>
                             <span class="text-red-600 font-bold">{{ res.count }} 票</span>
                         </div>
                     </div>
-                    <button @click="changePhase('results')" class="w-full mt-6 bg-pink-500 text-white font-bold py-3 rounded">正解発表</button>
+                    <button @click="changePhase('results')" class="w-full mt-6 bg-pink-500 text-white font-bold py-3 rounded">正解と勝敗を発表</button>
                 </div>
 
                 <div v-if="gameState.phase === 'results'">
-                    <div class="text-center p-6 bg-red-50 rounded border border-red-100 mb-4">
-                        <h3 class="text-xl font-bold text-red-600">正解は {{ getPlayerName(gameState.modifiedPlayerId) }}</h3>
+                    <div class="text-center p-6 bg-white rounded shadow border mb-4">
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">正解発表</h3>
+                        <p class="text-2xl font-bold mb-4 text-red-600">人狼は {{ getPlayerName(gameState.modifiedPlayerId) }} でした！</p>
+                        
+                        <div class="py-4 px-2 rounded-lg mb-6 font-bold text-2xl" 
+                             :class="wolfResult === 'WIN' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700'">
+                            {{ wolfResult === 'WIN' ? '🎉 人狼の勝ち！ 🎉' : '💀 人狼の負け... 💀' }}
+                        </div>
+
+                        <p class="text-sm font-bold text-gray-500 border-b pb-1 mb-2 text-left">最終投票ランキング</p>
+                        <div class="space-y-1 text-left">
+                            <div v-for="res in voteResults" :key="res.id" class="flex justify-between bg-gray-50 p-2 rounded border text-sm">
+                                <span class="font-bold">{{ res.name }}</span>
+                                <span class="text-red-600 font-bold">{{ res.count }} 票</span>
+                            </div>
+                        </div>
                     </div>
-                    <button @click="resetGame" class="w-full bg-gray-800 text-white font-bold py-3 rounded">次の問題へ</button>
+                    <button @click="resetGame" class="w-full bg-gray-800 text-white font-bold py-3 rounded shadow-lg">次の問題へ (全員をリセット)</button>
                 </div>
             </div>
         </div>
 
         <div v-if="role === 'player'" class="bg-white p-6 rounded-lg shadow-md min-h-[60vh]">
             <div v-if="gameState.phase === 'lobby'" class="text-center">
-                <div v-if="gameState.rules" class="mb-6 p-4 bg-indigo-50 border rounded text-left text-sm">
-                    <p class="font-bold text-indigo-700 mb-1">【ルール】</p>{{ gameState.rules }}
+                <div v-if="gameState.rules" class="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded text-left text-sm shadow-sm">
+                    <p class="font-bold text-indigo-700 mb-2 border-b border-indigo-200 pb-1">【ルール】</p>
+                    <p style="white-space: pre-wrap; line-height: 1.6;" class="text-gray-700">{{ gameState.rules }}</p>
                 </div>
                 <p class="text-xl font-bold text-gray-400 animate-pulse">待機中...</p>
             </div>
@@ -131,7 +147,7 @@
             <div v-if="gameState.phase === 'revealed'" class="text-center">
                 <h3 class="font-bold mb-4 border-b pb-2">発表された解答</h3>
                 <div class="text-left space-y-2">
-                    <div v-for="p in gameState.players" class="bg-gray-50 p-3 rounded border text-sm font-bold">
+                    <div v-for="p in gameState.players" class="bg-gray-50 p-3 rounded border text-sm font-bold shadow-sm">
                         <span class="text-indigo-600">{{p.name}}:</span> {{p.answer}}
                     </div>
                 </div>
@@ -141,13 +157,14 @@
                 <h3 class="font-bold mb-4 border-b pb-2">人狼だと思う人に投票！</h3>
                 <div class="space-y-3 text-left">
                     <template v-for="p in gameState.players" :key="p.id">
-                        <label v-if="p.id !== myPlayerInfo?.id" class="block border p-4 rounded-xl cursor-pointer hover:bg-gray-50">
+                        <label v-if="p.id !== myPlayerInfo?.id" class="block border p-4 rounded-xl cursor-pointer hover:bg-gray-50 shadow-sm transition-all">
                             <input type="radio" :value="p.id" v-model="myVote" class="mr-2 transform scale-150">
-                            <span class="font-bold">{{ p.name }}</span>
+                            <span class="font-bold text-lg">{{ p.name }}</span>
                         </label>
                     </template>
                 </div>
                 <button @click="submitVote" class="w-full mt-6 bg-yellow-500 text-white font-bold py-4 rounded text-lg shadow">投票を確定</button>
+                <p v-if="myPlayerInfo?.vote" class="mt-4 text-green-600 font-bold">✓ 投票完了！他の人を待っています</p>
             </div>
 
             <div v-if="gameState.phase === 'vote_results'" class="text-center">
@@ -160,11 +177,24 @@
                 </div>
             </div>
 
-            <div v-if="gameState.phase === 'results'" class="text-center py-10">
-                <h3 class="text-2xl font-bold text-red-600 mb-4">正解発表！</h3>
-                <p class="text-sm text-gray-500 mb-2">ホストに解答を書き換えられたのは...</p>
-                <div class="bg-indigo-600 text-white p-6 rounded-3xl text-3xl font-bold shadow-xl border-4 border-indigo-200">
+            <div v-if="gameState.phase === 'results'" class="text-center">
+                <h3 class="text-xl font-bold text-gray-800 mb-2 border-b pb-2">結果発表！</h3>
+                <p class="text-sm text-gray-500 mb-2">ホストに解答を書き換えられた人狼は...</p>
+                <div class="bg-white text-red-600 p-4 rounded-xl text-3xl font-bold shadow border-2 border-red-100 mb-4">
                     {{ getPlayerName(gameState.modifiedPlayerId) }}
+                </div>
+
+                <div class="py-4 px-2 rounded-lg mb-6 font-bold text-xl shadow" 
+                     :class="wolfResult === 'WIN' ? 'bg-indigo-600 text-white' : 'bg-green-500 text-white'">
+                    {{ wolfResult === 'WIN' ? '🎉 人狼の勝ち！ 🎉' : '💀 人狼の負け... 💀' }}
+                </div>
+
+                <div class="space-y-2 text-left mt-6">
+                    <p class="font-bold text-sm text-gray-500 mb-2">最終投票ランキング</p>
+                    <div v-for="res in voteResults" class="flex justify-between bg-gray-50 p-2 rounded border text-sm">
+                        <span class="font-bold">{{ res.name }}</span>
+                        <span class="text-red-600 font-bold">{{ res.count }} 票</span>
+                    </div>
                 </div>
             </div>
 
@@ -193,7 +223,38 @@
                     const counts = {};
                     this.gameState.players.forEach(p => counts[p.id] = 0);
                     this.gameState.players.forEach(p => { if (p.vote) counts[p.vote]++; });
+                    // 票数が多い順にソートして返す
                     return this.gameState.players.map(p => ({ id: p.id, name: p.name, count: counts[p.id] })).sort((a, b) => b.count - a.count);
+                },
+                // 勝敗の自動判定ロジック
+                wolfResult() {
+                    if (!this.gameState.modifiedPlayerId || this.voteResults.length === 0) return null;
+                    const results = this.voteResults;
+                    const topVoteCount = results[0].count; // ソート済みの1位の得票数
+                    
+                    // 1位と同じ票数を持つ人をすべて抽出（同率1位の確認）
+                    const topVotedPlayers = results.filter(r => r.count === topVoteCount);
+                    
+                    // 同率1位が複数いる場合 → 人狼の勝ち
+                    if (topVotedPlayers.length > 1) {
+                        return 'WIN';
+                    } else {
+                        // 単独1位が人狼だった場合 → 人狼の負け、それ以外は勝ち
+                        if (topVotedPlayers[0].id === this.gameState.modifiedPlayerId) {
+                            return 'LOSE';
+                        } else {
+                            return 'WIN';
+                        }
+                    }
+                }
+            },
+            watch: {
+                // 状態が「lobby（待機）」に戻ったとき、スマホの入力欄を自動クリアする
+                'gameState.phase'(newPhase) {
+                    if (newPhase === 'lobby') {
+                        this.myInput = '';
+                        this.myVote = '';
+                    }
                 }
             },
             methods: {
@@ -209,8 +270,8 @@
                     this.peer.on('connection', (conn) => {
                         this.connections.push(conn);
                         conn.on('data', (data) => {
-                            if (data.type === 'join') { this.gameState.players.push({ id: conn.peer, name: data.name, answer: '', vote: '' }); this.broadcastState(); }
-                            if (data.type === 'answer') { let p = this.gameState.players.find(p => p.id === conn.peer); if (p) { p.answer = data.answer; this.broadcastState(); } }
+                            if (data.type === 'join') { this.gameState.players.push({ id: conn.peer, name: data.name, answer: '', originalAnswer: '', vote: '' }); this.broadcastState(); }
+                            if (data.type === 'answer') { let p = this.gameState.players.find(p => p.id === conn.peer); if (p) { p.answer = data.answer; p.originalAnswer = data.answer; this.broadcastState(); } }
                             if (data.type === 'vote') { let p = this.gameState.players.find(p => p.id === conn.peer); if (p) { p.vote = data.vote; this.broadcastState(); } }
                         });
                     });
@@ -225,15 +286,30 @@
                     });
                 },
                 broadcastState() { this.connections.forEach(c => c.send({ type: 'state_update', state: this.gameState })); },
-                changePhase(p) { this.gameState.phase = p; this.broadcastState(); },
+                changePhase(p) { 
+                    this.gameState.phase = p; 
+                    
+                    // 改ざんフェイズへ進むとき、ランダムに1人を人狼として選ぶ
+                    if (p === 'modifying') {
+                        const playersList = this.gameState.players;
+                        if (playersList.length > 0) {
+                            const randomIndex = Math.floor(Math.random() * playersList.length);
+                            this.gameState.modifiedPlayerId = playersList[randomIndex].id;
+                        }
+                    }
+                    
+                    this.broadcastState(); 
+                },
                 resetGame() {
                     this.gameState.phase = 'lobby'; this.gameState.modifiedPlayerId = null;
-                    this.gameState.players.forEach(p => { p.answer = ''; p.vote = ''; });
+                    this.gameState.players.forEach(p => { p.answer = ''; p.originalAnswer = ''; p.vote = ''; });
                     this.myInput = ''; this.myVote = ''; this.broadcastState();
                 },
                 submitAnswer() { if(confirm(`「${this.myInput}」で送信しますか？`)) this.conn.send({ type: 'answer', answer: this.myInput }); },
                 submitVote() { if(confirm("投票を確定しますか？")) this.conn.send({ type: 'vote', vote: this.myVote }); },
-                getPlayerName(id) { return (this.gameState.players.find(p => p.id === id) || {}).name; }
+                getPlayerName(id) { return (this.gameState.players.find(p => p.id === id) || {}).name; },
+                getModifiedPlayer() { return this.gameState.players.find(p => p.id === this.gameState.modifiedPlayerId) || {}; },
+                getOriginalAnswer(id) { const p = this.gameState.players.find(p => p.id === id); return p ? p.originalAnswer : ''; }
             }
         }).mount('#app');
     </script>
