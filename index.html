@@ -119,16 +119,16 @@
                             
                             <span class="font-bold mb-1" :class="p.id === gameState.modifiedPlayerId ? 'text-red-700' : 'text-indigo-600'">
                                 {{p.name}}:
-                                <span v-if="p.id === gameState.modifiedPlayerId" class="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full ml-1">AI乗っ取り</span>
+                                <span v-if="p.id === gameState.modifiedPlayerId" class="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full ml-1">AIに乗っ取られた人（人狼）</span>
                             </span> 
 
                             <div v-if="p.id === gameState.modifiedPlayerId" class="mt-1 p-2 bg-white rounded border border-red-100">
-                                <p class="text-xs text-gray-400 line-through mb-1">元の解答: {{p.originalAnswer}}</p>
-                                <p class="text-base font-bold text-red-600">乗っ取り後: {{p.answer}}</p>
+                                <p class="text-xs text-gray-500 mb-1">改ざん前: <span class="line-through">{{p.originalAnswer}}</span></p>
+                                <p class="text-base font-bold text-red-600">改ざん後: {{p.answer}}</p>
                             </div>
                             
                             <div v-else>
-                                <span class="text-base">{{p.answer}}</span>
+                                <span class="text-base font-bold text-gray-800">{{p.answer}}</span>
                             </div>
                         </div>
                     </div>
@@ -191,16 +191,21 @@
                 <p class="text-xl font-bold text-gray-400 animate-pulse">待機中...</p>
             </div>
 
-            <div v-if="gameState.phase !== 'lobby' && !['modifying'].includes(gameState.phase) && gameState.currentQuestion" class="mb-6 p-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl text-center shadow-sm w-full">
-                <p class="text-sm text-indigo-600 font-bold mb-1">【今回のお題】</p>
-                <p class="font-bold text-gray-800 text-xl">{{ gameState.currentQuestion }}</p>
-            </div>
-
             <div v-if="gameState.phase === 'answering'" class="text-center w-full">
+                <div v-if="gameState.currentQuestion" class="mb-6 p-5 bg-indigo-50 border-2 border-indigo-300 rounded-xl text-center shadow-md w-full">
+                    <p class="text-sm text-indigo-700 font-bold mb-2">【今回のお題】</p>
+                    <p class="font-bold text-gray-800 text-2xl">{{ gameState.currentQuestion }}</p>
+                </div>
+
                 <h3 class="font-bold mb-4">解答を入力</h3>
                 <input v-model="myInput" type="text" class="w-full border p-4 rounded mb-4 text-lg shadow-inner bg-gray-50 focus:bg-white transition-colors outline-none focus:border-blue-500">
                 <button @click="submitAnswer" class="w-full bg-blue-500 text-white font-bold py-4 rounded shadow-md">送信する</button>
                 <p v-if="myPlayerInfo?.answer" class="mt-4 text-green-600 font-bold">✓ 送信完了！</p>
+            </div>
+
+            <div v-if="gameState.phase !== 'lobby' && gameState.phase !== 'answering' && !['modifying'].includes(gameState.phase) && gameState.currentQuestion" class="mb-6 p-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl text-center shadow-sm w-full">
+                <p class="text-sm text-indigo-600 font-bold mb-1">【今回のお題】</p>
+                <p class="font-bold text-gray-800 text-xl">{{ gameState.currentQuestion }}</p>
             </div>
 
             <div v-if="gameState.phase === 'revealed'" class="text-center w-full">
