@@ -289,11 +289,13 @@
                     
                     timeLeft: 120,
                     timerInterval: null,
-                    showTimeUpPopup: false
+                    showTimeUpPopup: false,
+                    wakeLock: null // スリープ防止用の変数
                 }
             },
             mounted() {
                 this.targetRoomId = new URLSearchParams(window.location.search).get('room');
+                this.preventReload(); // リロード警告をセット
             },
             computed: {
                 players() { return this.gameState.players; },
@@ -353,9 +355,37 @@
                 }
             },
             methods: {
+                // スリープ（画面消灯）を防ぐ機能
+                async enableWakeLock() {
+                    if ('wakeLock' in navigator) {
+                        try {
+                            this.wakeLock = await navigator.wakeLock.request('screen');
+                            // タブを切り替えて戻ってきた時に再度ロックをかける
+                            document.addEventListener('visibilitychange', async () => {
+                                if (this.wakeLock !== null && document.visibilityState === 'visible') {
+                                    this.wakeLock = await navigator.wakeLock.request('screen');
+                                }
+                            });
+                        } catch (err) {
+                            console.error('Wake Lock error:', err);
+                        }
+                    }
+                },
+                // 誤操作による更新（リロード）を防ぐ警告ポップアップ
+                preventReload() {
+                    window.addEventListener('beforeunload', (e) => {
+                        if (this.role) { // 部屋に入っている時だけ警告を出す
+                            e.preventDefault();
+                            e.returnValue = ''; 
+                        }
+                    });
+                },
+
                 saveRulesLocal() { localStorage.setItem('werewolf_rules', this.gameState.rules); },
                 createRoom() {
                     this.role = 'host'; this.roomId = 'ROOM-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+                    this.enableWakeLock(); // ホストも画面スリープを防止
+                    
                     this.peer = new Peer(this.roomId);
                     this.peer.on('open', () => {
                         setTimeout(() => {
@@ -369,11 +399,17 @@
                             if (data.type === 'answer') { let p = this.gameState.players.find(p => p.id === conn.peer); if (p) { p.answer = data.answer; p.originalAnswer = data.answer; this.broadcastState(); } }
                             if (data.type === 'vote') { let p = this.gameState.players.find(p => p.id === conn.peer); if (p) { p.vote = data.vote; this.broadcastState(); } }
                         });
+                        conn.on('close', () => {
+                            // 参加者が落ちてしまった時の簡単な処理（リストから消す等が必要ならここに追加）
+                        });
                     });
                 },
                 joinAsPlayer() {
                     if (!this.playerName.trim()) return alert("名前を入力してください");
-                    this.role = 'player'; this.peer = new Peer();
+                    this.role = 'player'; 
+                    this.enableWakeLock(); // 参加者の画面スリープを防止
+                    
+                    this.peer = new Peer();
                     this.peer.on('open', () => {
                         this.conn = this.peer.connect(this.targetRoomId);
                         this.conn.on('open', () => { this.conn.send({ type: 'join', name: this.playerName }); });
